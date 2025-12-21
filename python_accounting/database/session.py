@@ -1,4 +1,4 @@
-# database/session.py
+# database/session_adj.py
 # Copyright (C) 2024 - 2028 the PythonAccounting authors and contributors
 # <see AUTHORS file>
 #
@@ -15,7 +15,7 @@ from sqlalchemy.orm.session import Session
 from python_accounting.models import Entity
 from python_accounting.database.session_overrides import SessionOverridesMixin
 from python_accounting.database.accounting_functions import AccountingFunctionsMixin
-from python_accounting.database.event_listeners import EventListenersMixin, register_accounting_events
+from python_accounting.database.event_listeners_adj import EventListenersMixin, register_accounting_events
 
 class AccountingSession(
     SessionOverridesMixin, EventListenersMixin, AccountingFunctionsMixin, Session

@@ -1,4 +1,4 @@
-# database/event_listeners.py
+# database/event_listeners_adj.py
 # Copyright (C) 2024 - 2028 the PythonAccounting authors and contributors
 # <see AUTHORS file>
 #
@@ -17,6 +17,9 @@ from sqlalchemy.orm.session import Session
 from python_accounting.models import Entity, Recyclable, Transaction, Account, Ledger
 from python_accounting.mixins import IsolatingMixin
 from python_accounting.exceptions import MissingEntityError
+
+# Internal guard to avoid double-registration of event listeners.
+_REGISTERED_SESSION_CLASSES = set()
 
 def _filter_options(execute_state, option) -> bool:
     return (
@@ -102,31 +105,42 @@ def _validate_model(session, _, __) -> None:
 # The Ledger event handler stays at the model level but checks for accounting sessions
 @event.listens_for(Ledger, "after_insert")
 def _set_ledger_hash(mapper, connection, target):
-    # Only proceed if session has our entity attribute (our custom session type)
-    if hasattr(target, "_sa_instance_state") and \
-       hasattr(target._sa_instance_state.session, "entity"):
-        connection.execute(
-            update(Ledger)
-            .where(Ledger.id == target.id)
-            .values(hash=target.get_hash(connection))
+    # Integrity behavior: always set ledger hash after insert.
+    connection.execute(
+        update(Ledger)
+        .where(Ledger.id == target.id)
+        .values(hash=target.get_hash(connection))
+    )
+
+def register_accounting_events(session_factory_or_cls):
+    """
+    Register accounting-specific event listeners without registering them globally
+    on sqlalchemy.orm.Session.
+
+    This function accepts either:
+      - a sessionmaker instance (recommended), or
+      - a SQLAlchemy Session subclass.
+
+    Listener registration is idempotent per Session subclass to avoid double-registration.
+    """
+    session_cls = getattr(session_factory_or_cls, "class_", None) or session_factory_or_cls
+
+    # Best-effort validation: session_cls must be a Session subclass.
+    if not isinstance(session_cls, type) or not issubclass(session_cls, Session):
+        raise TypeError(
+            "register_accounting_events expects a sessionmaker or a SQLAlchemy Session subclass"
         )
 
-def register_accounting_events(session_factory):
-    """
-    Register accounting-specific event listeners to a specific session factory
-    rather than globally to the Session class.
-    
-    Args:
-        session_factory: A sessionmaker instance
-    
-    Returns:
-        The modified sessionmaker instance
-    """
-    event.listen(session_factory, "do_orm_execute", _add_filtering_criteria)
-    event.listen(session_factory, "transient_to_pending", _set_session_entity)
-    event.listen(session_factory, "transient_to_pending", _set_object_index)
-    event.listen(session_factory, "before_flush", _validate_model)
-    return session_factory
+    key = id(session_cls)
+    if key in _REGISTERED_SESSION_CLASSES:
+        return session_factory_or_cls
+    _REGISTERED_SESSION_CLASSES.add(key)
+
+    event.listen(session_cls, "do_orm_execute", _add_filtering_criteria)
+    event.listen(session_cls, "transient_to_pending", _set_session_entity)
+    event.listen(session_cls, "transient_to_pending", _set_object_index)
+    event.listen(session_cls, "before_flush", _validate_model)
+    return session_factory_or_cls
 
 # Keep the class for backward compatibility, but it no longer registers global listeners
 class EventListenersMixin:
