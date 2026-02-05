@@ -29,7 +29,6 @@ from python_accounting.exceptions import (
     InvalidBalanceDateError,
 )
 from python_accounting.mixins import IsolatingMixin, ClearingMixin
-from python_accounting.reports import IncomeStatement
 
 
 class Balance(IsolatingMixin, ClearingMixin, Recyclable):
@@ -165,6 +164,7 @@ class Balance(IsolatingMixin, ClearingMixin, Recyclable):
         if self.amount < 0:
             raise NegativeValueError(self.__class__.__name__)
 
+        from python_accounting.reports import IncomeStatement
         if account.account_type in [t.value for t in IncomeStatement.Accounts]:
             raise InvalidBalanceAccountError
 

@@ -1,4 +1,4 @@
-# database/session_adj.py
+# database/session.py
 # Copyright (C) 2024 - 2028 the PythonAccounting authors and contributors
 # <see AUTHORS file>
 #
@@ -15,7 +15,7 @@ from sqlalchemy.orm.session import Session
 from python_accounting.models import Entity
 from python_accounting.database.session_overrides import SessionOverridesMixin
 from python_accounting.database.accounting_functions import AccountingFunctionsMixin
-from python_accounting.database.event_listeners_adj import EventListenersMixin, register_accounting_events
+from python_accounting.database.event_listeners import EventListenersMixin, register_accounting_events
 
 class AccountingSession(
     SessionOverridesMixin, EventListenersMixin, AccountingFunctionsMixin, Session
@@ -32,13 +32,22 @@ class AccountingSession(
     def __init__(self, bind=None, info=None, **kwargs) -> None:
         super().__init__(bind=bind, info=info, **kwargs)
 
+# Register event listeners at import time on the AccountingSession class.
+# This restores the reliability of the original library where listeners were
+# registered via @event.listens_for(Session, ...) decorators at import time,
+# but scoped to AccountingSession only (not the base Session class) to avoid
+# interfering with non-accounting sessions in the host application.
+# The idempotency guard in register_accounting_events() prevents double-registration
+# when get_session_factory() is called later.
+register_accounting_events(AccountingSession)
+
 def get_session_factory(engine):
     """
     Create a session factory with accounting-specific event listeners.
-    
+
     Args:
         engine: The database engine to create sessions for.
-        
+
     Returns:
         A sessionmaker that will create AccountingSession instances with proper event listeners.
     """
@@ -50,7 +59,7 @@ def get_session_factory(engine):
             "ignore_isolation": engine.get_execution_options().get("ignore_isolation", False),
         }
     )
-    
+
     # Register event listeners on this specific factory
     return register_accounting_events(factory)
 
