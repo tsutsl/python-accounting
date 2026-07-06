@@ -21,11 +21,13 @@ class Base(DeclarativeBase):
     """
     id (int): The primary key of the model database record.
     """
-    created_at: Mapped[datetime] = mapped_column(default=datetime.now())
+    # default must be the callable, not its result: datetime.now() would be
+    # evaluated once at import, stamping every row with the process boot time.
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
     """
     created_at (datetime): The time the database record was created.
     """
-    updated_at: Mapped[datetime] = mapped_column(default=datetime.now())
+    updated_at: Mapped[datetime] = mapped_column(default=datetime.now, onupdate=datetime.now)
     """
     update_at (datetime): The time the database record was last modified.
     """
